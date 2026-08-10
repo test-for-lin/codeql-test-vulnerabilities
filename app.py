@@ -48,8 +48,20 @@ def ping_host():
     CodeQL: py/command-line-injection (critical/error severity).
     """
     host = request.args.get("host", "")
-    result = os.popen("ping -c 1 " + host).read()
-    return {"result": result}
+
+    if not host or len(host) > 253 or not re.fullmatch(r"[A-Za-z0-9.-]+", host):
+        return {"error": "invalid host"}, 400
+
+    try:
+        completed = subprocess.run(
+            ["ping", "-c", "1", host],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {"result": completed.stdout}
+    except OSError:
+        return {"error": "ping failed"}, 500
 
 
 @app.route("/backup")
