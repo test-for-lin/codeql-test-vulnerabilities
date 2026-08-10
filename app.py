@@ -6,6 +6,7 @@ findings.
 DO NOT deploy this. DO NOT copy these patterns into real projects.
 """
 
+import ast
 import os
 import re
 import sqlite3
@@ -71,6 +72,44 @@ def backup_data():
     return {"status": "started"}
 
 
+def _safe_eval_expr(expr):
+    allowed_bin_ops = {
+        ast.Add: lambda a, b: a + b,
+        ast.Sub: lambda a, b: a - b,
+        ast.Mult: lambda a, b: a * b,
+        ast.Div: lambda a, b: a / b,
+        ast.FloorDiv: lambda a, b: a // b,
+        ast.Mod: lambda a, b: a % b,
+        ast.Pow: lambda a, b: a**b,
+    }
+    allowed_unary_ops = {
+        ast.UAdd: lambda a: +a,
+        ast.USub: lambda a: -a,
+    }
+
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if hasattr(ast, "Num") and isinstance(node, ast.Num):
+            return node.n
+        if isinstance(node, ast.BinOp):
+            op_type = type(node.op)
+            if op_type not in allowed_bin_ops:
+                raise ValueError("Unsupported operator")
+            return allowed_bin_ops[op_type](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp):
+            op_type = type(node.op)
+            if op_type not in allowed_unary_ops:
+                raise ValueError("Unsupported unary operator")
+            return allowed_unary_ops[op_type](_eval(node.operand))
+        raise ValueError("Unsupported expression")
+
+    parsed = ast.parse(expr, mode="eval")
+    return _eval(parsed)
+
+
 @app.route("/eval")
 def eval_expression():
     """Code injection: user input passed directly to eval().
@@ -78,7 +117,10 @@ def eval_expression():
     CodeQL: py/code-injection (critical/error severity).
     """
     expr = request.args.get("expr", "1+1")
-    return {"result": eval(expr)}
+    try:
+        return {"result": _safe_eval_expr(expr)}
+    except (ValueError, SyntaxError):
+        return {"error": "Invalid expression"}, 400
 
 
 if __name__ == "__main__":
