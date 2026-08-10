@@ -7,6 +7,7 @@ DO NOT deploy this. DO NOT copy these patterns into real projects.
 """
 
 import os
+import re
 import sqlite3
 import subprocess
 
@@ -57,7 +58,16 @@ def backup_data():
     CodeQL: py/command-line-injection (critical/error severity).
     """
     filename = request.args.get("filename", "backup.tar")
-    subprocess.call("tar -cf " + filename + " ./data", shell=True)
+
+    if (
+        not filename
+        or filename.startswith("-")
+        or os.path.basename(filename) != filename
+        or not re.fullmatch(r"[A-Za-z0-9._-]+", filename)
+    ):
+        return {"error": "invalid filename"}, 400
+
+    subprocess.call(["tar", "-cf", filename, "./data"])
     return {"status": "started"}
 
 
