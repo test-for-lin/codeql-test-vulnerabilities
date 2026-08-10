@@ -33,8 +33,8 @@ def get_user_by_name():
     """
     name = request.args.get("name", "")
     conn = get_db()
-    query = "SELECT id, name, email FROM users WHERE name = '" + name + "'"
-    cursor = conn.execute(query)
+    query = "SELECT id, name, email FROM users WHERE name = ?"
+    cursor = conn.execute(query, (name,))
     rows = cursor.fetchall()
     return {"users": rows}
 
